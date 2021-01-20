@@ -11,6 +11,41 @@
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
+struct Vertex
+{
+    glm::vec2 pos;
+    glm::vec3 color;
+    static VkVertexInputBindingDescription getBindingDescription()
+    {
+        VkVertexInputBindingDescription ret{
+            0,
+            sizeof Vertex,
+            VK_VERTEX_INPUT_RATE_VERTEX};
+        return ret;
+    }
+    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        std::array<VkVertexInputAttributeDescription, 2> ret = {
+            VkVertexInputAttributeDescription{0,
+                                              0,
+                                              VK_FORMAT_R32G32_SFLOAT,
+                                              static_cast<uint32_t>(offsetof(Vertex, pos))},
+            VkVertexInputAttributeDescription{1,
+                                              0,
+                                              VK_FORMAT_R32G32B32_SFLOAT,
+                                              static_cast<uint32_t>(offsetof(Vertex, color))}};
+        return ret;
+    }
+};
+std::vector<Vertex> vertices{
+    {{-0.5, -0.5}, {1, 0, 0}},
+    {{-0.5, 0.5}, {0, 1, 0}},
+    {{0.5, -0.5}, {0, 0, 1}},
+    {{0.5, 0.5}, {1, 1, 1}},
+};
+std::vector<uint16_t> indices{
+    0, 1, 2, 2, 1, 3};
+
 class HelloTriangleApplication
 {
 public:
@@ -21,33 +56,6 @@ public:
         mainLoop();
         cleanup();
     }
-
-    struct Vertex
-    {
-        glm::vec2 pos;
-        glm::vec3 color;
-        static VkVertexInputBindingDescription getBindingDescription()
-        {
-            VkVertexInputBindingDescription ret{
-                0,
-                sizeof Vertex,
-                VK_VERTEX_INPUT_RATE_VERTEX};
-            return ret;
-        }
-        static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
-        {
-            std::array<VkVertexInputAttributeDescription, 2> ret = {
-                VkVertexInputAttributeDescription{0,
-                                                  0,
-                                                  VK_FORMAT_R32G32_SFLOAT,
-                                                  static_cast<uint32_t>(offsetof(Vertex, pos))},
-                VkVertexInputAttributeDescription{1,
-                                                  0,
-                                                  VK_FORMAT_R32G32B32_SFLOAT,
-                                                  static_cast<uint32_t>(offsetof(Vertex, color))}};
-            return ret;
-        }
-    };
 
 private:
     GLFWwindow *window;
@@ -102,9 +110,10 @@ private:
 
     size_t currentFrame{0};
 
-    std::vector<Vertex> vertices;
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
 
     void initWindow()
     {
@@ -145,13 +154,14 @@ private:
         vkGetDeviceQueue(logicalDevice, transferQueueFamilyIndex, 0, &transferQueue);
 
         commandPool = createCommandPool(logicalDevice, graphicQueueFamilyIndex);
-        transferCommandPool=createCommandPool(logicalDevice,transferQueueFamilyIndex);
+        transferCommandPool = createCommandPool(logicalDevice, transferQueueFamilyIndex);
 
         createShaderModuleInfos();
         createDescriptorSetLayouts();
         pipelineLayout = createPipelineLayout(logicalDevice, descriptorSetLayouts);
 
         createVertexBuffer();
+        createIndexBuffer();
 
         surfaceCaps = querySurfaceCapabilities(physicalDevice, surface);
         chooseSwapExtent(surfaceCaps, window, swapchainExtent);
@@ -221,6 +231,8 @@ private:
 
         vkDestroyBuffer(logicalDevice, vertexBuffer, nullptr);
         vkFreeMemory(logicalDevice, vertexBufferMemory, nullptr);
+        vkDestroyBuffer(logicalDevice, indexBuffer, nullptr);
+        vkFreeMemory(logicalDevice, indexBufferMemory, nullptr);
 
         for (auto v : inFlightFences)
             vkDestroyFence(logicalDevice, v, nullptr);
@@ -519,7 +531,7 @@ private:
     }
     void submitCommandBuffers()
     {
-        auto count=static_cast<uint32_t>(swapchainFramebuffers.size());
+        auto count = static_cast<uint32_t>(swapchainFramebuffers.size());
         commandBuffers = createCommandBuffers(logicalDevice, commandPool, count);
 
         VkClearValue clearValue{
@@ -552,8 +564,10 @@ private:
             std::vector<VkBuffer> vertexBuffers = {vertexBuffer};
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffers[i], 0, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets);
+            vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-            vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+            //            vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+            vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
             vkCmdEndRenderPass(commandBuffers[i]);
 
@@ -655,26 +669,40 @@ private:
     }
     void createVertexBuffer()
     {
-        vertices =
-            {
-                {{-1, -1}, {1, 0, 0}},
-                {{-1, 1}, {0, 1, 0}},
-                {{1, -1}, {0, 0, 1}},
-            };
         VkDeviceSize buffersize = sizeof(vertices[0]) * vertices.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
         memcpy(data, vertices.data(), buffersize);
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         //use device local buffer is fastest
-        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 
         copyBuffer(logicalDevice, transferCommandPool, transferQueue, stagingBuffer, vertexBuffer, buffersize);
+
+        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    }
+    void createIndexBuffer()
+    {
+        VkDeviceSize buffersize = sizeof(indices[0]) * indices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        void *data;
+        vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
+        memcpy(data, indices.data(), buffersize);
+        vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+        //use device local buffer is fastest
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+
+        copyBuffer(logicalDevice, transferCommandPool, transferQueue, stagingBuffer, indexBuffer, buffersize);
 
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);

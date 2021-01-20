@@ -124,7 +124,7 @@ VkFence createFence(VkDevice logicalDevice, VkFenceCreateFlags flags);
 
 void chooseSwapExtent(const VkSurfaceCapabilitiesKHR &surfaceCaps, GLFWwindow *window, VkExtent2D &outExtent);
 
-void createBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,VkBuffer& outBuffer,VkDeviceMemory& outBufferMemory);
+void createBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &outBuffer, VkDeviceMemory &outBufferMemory);
 
 uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice, uint32_t typeIndexFilter, VkMemoryPropertyFlags properties);
 
