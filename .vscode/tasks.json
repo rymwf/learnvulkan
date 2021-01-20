@@ -1,0 +1,45 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "cmake build active file Debug x64",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"${fileDirname}\\build\\",
+				"--target",
+				"${fileBasenameNoExtension}",
+				"--config",
+				"Debug"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "cppbuild",
+			"label": "cmake build active file Release x64",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"${fileDirname}\\build\\",
+				"--target",
+				"${fileBasenameNoExtension}",
+				"--config",
+				"Release"
+			],
+			"options": {
+				"cwd": "${fileDirname}"
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
+	]
+}
