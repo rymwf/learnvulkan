@@ -97,7 +97,7 @@ VkSwapchainKHR createSwapchain(VkDevice device,
                                const VkExtent2D &swapchainExtent,
                                VkFormat &swapchainImageFormatOut);
 
-uint32_t findQueueFamilyIndexByFlag(std::vector<VkQueueFamilyProperties> &queueFamilyProperties, VkQueueFlagBits flag);
+uint32_t findQueueFamilyIndexByFlag(std::vector<VkQueueFamilyProperties> &queueFamilyProperties, VkQueueFlagBits flag, const std::unordered_set<uint32_t> &skipIndices = {});
 uint32_t findQueueFamilyIndexPresent(VkPhysicalDevice physicalDevice, uint32_t familyNum, VkSurfaceKHR surface);
 
 void createImageViews(VkDevice logicalDevice,

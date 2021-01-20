@@ -57,6 +57,7 @@ private:
 
     uint32_t graphicQueueFamilyIndex;
     uint32_t presentQueueFamilyIndex;
+    uint32_t transferQueueFamilyIndex;
 
     std::vector<uint32_t> queueFamilyIndices; //contains only unique indices, include graphicQueueFamilyIndex and presentQueueFamilyIndex,
 
@@ -64,7 +65,7 @@ private:
 
     VkQueue graphicQueue;
     VkQueue presentQueue;
-    VkQueue transitQueue;
+    VkQueue transferQueue;
 
     VkSurfaceKHR surface;
     VkSurfaceCapabilitiesKHR surfaceCaps;
@@ -89,6 +90,7 @@ private:
 
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
+    VkCommandPool transferCommandPool;
 
     //each frame should have its own set of semaphores
     std::vector<VkSemaphore> imageAvailableSemaphores;
@@ -135,13 +137,15 @@ private:
 
         findSuitableQueueFamilyIndices();
 
-        std::unordered_set<uint32_t> tempQueueFamilyIndices{graphicQueueFamilyIndex, presentQueueFamilyIndex};
+        std::unordered_set<uint32_t> tempQueueFamilyIndices{graphicQueueFamilyIndex, presentQueueFamilyIndex, transferQueueFamilyIndex};
         queueFamilyIndices.insert(queueFamilyIndices.end(), tempQueueFamilyIndices.begin(), tempQueueFamilyIndices.end());
         logicalDevice = createLogicalDevice(physicalDevice, queueFamilyIndices);
         vkGetDeviceQueue(logicalDevice, graphicQueueFamilyIndex, 0, &graphicQueue);
         vkGetDeviceQueue(logicalDevice, presentQueueFamilyIndex, 0, &presentQueue);
+        vkGetDeviceQueue(logicalDevice, transferQueueFamilyIndex, 0, &transferQueue);
 
         commandPool = createCommandPool(logicalDevice, graphicQueueFamilyIndex);
+        transferCommandPool=createCommandPool(logicalDevice,transferQueueFamilyIndex);
 
         createShaderModuleInfos();
         createDescriptorSetLayouts();
@@ -226,6 +230,7 @@ private:
             vkDestroySemaphore(logicalDevice, v, nullptr);
 
         vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
+        vkDestroyCommandPool(logicalDevice, transferCommandPool, nullptr);
 
         for (auto e : descriptorSetLayouts)
             vkDestroyDescriptorSetLayout(logicalDevice, e, nullptr);
@@ -249,9 +254,11 @@ private:
 
         graphicQueueFamilyIndex = findQueueFamilyIndexByFlag(queueFamilyProperties, VK_QUEUE_GRAPHICS_BIT);
         presentQueueFamilyIndex = findQueueFamilyIndexPresent(physicalDevice, static_cast<uint32_t>(queueFamilyProperties.size()), surface);
+        transferQueueFamilyIndex = findQueueFamilyIndexByFlag(queueFamilyProperties, VK_QUEUE_TRANSFER_BIT, {graphicQueueFamilyIndex, presentQueueFamilyIndex});
 
         LOG(graphicQueueFamilyIndex);
         LOG(presentQueueFamilyIndex);
+        LOG(transferQueueFamilyIndex);
     }
 
     void createShaderModuleInfos()
@@ -667,7 +674,7 @@ private:
         //use device local buffer is fastest
         createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 
-        copyBuffer(logicalDevice, commandPool, graphicQueue, stagingBuffer, vertexBuffer, buffersize);
+        copyBuffer(logicalDevice, transferCommandPool, transferQueue, stagingBuffer, vertexBuffer, buffersize);
 
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);

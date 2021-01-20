@@ -188,11 +188,13 @@ std::vector<VkQueueFamilyProperties> queryQueueFamilyProperties(VkPhysicalDevice
     return queueFamilyProperties;
 }
 
-uint32_t findQueueFamilyIndexByFlag(std::vector<VkQueueFamilyProperties> &queueFamilyProperties, VkQueueFlagBits flag)
+uint32_t findQueueFamilyIndexByFlag(std::vector<VkQueueFamilyProperties> &queueFamilyProperties, VkQueueFlagBits flag, const std::unordered_set<uint32_t> &skipIndices)
 {
     std::optional<uint32_t> ret{};
     for (uint32_t i = 0, l = static_cast<uint32_t>(queueFamilyProperties.size()); i < l; ++i)
     {
+        if (skipIndices.find(i) != skipIndices.end())
+            continue;
         if (queueFamilyProperties[i].queueFlags & flag)
         {
             ret = i;
