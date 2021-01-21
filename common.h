@@ -20,8 +20,10 @@
 #include <unordered_set>
 #include <array>
 #include <cstring>
+#include <chrono>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "config.h"
 
@@ -131,3 +133,7 @@ uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice, uint32_t typeIndex
 VkDeviceMemory allocateMemory(VkDevice logicalDevice, uint32_t memoryTypeIndex, VkDeviceSize memsize);
 
 void copyBuffer(VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize);
+
+VkDescriptorPool createDescriptorPool(VkDevice logicalDevice, uint32_t maxSetCount, const std::vector<VkDescriptorPoolSize> &descriptorPoolSizes);
+
+std::vector<VkDescriptorSet> createDescriptorSets(VkDevice logicalDevice, VkDescriptorPool descriptorPool, const std::vector<VkDescriptorSetLayout> &descriptorSetLayouts);

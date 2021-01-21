@@ -107,7 +107,7 @@ private:
 
         createShaderModuleInfos();
 
-        createDescriptorSetLayouts();
+        createDescriptors();
 
         pipelineLayout = createPipelineLayout(logicalDevice, descriptorSetLayouts);
 
@@ -204,7 +204,7 @@ private:
         shaderModuleInfos.emplace_back(ShaderModuleInfo{VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule});
     };
 
-    void createDescriptorSetLayouts()
+    void createDescriptors()
     {
         std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {};
         descriptorSetLayouts.emplace_back(createDescriptorSetLayout(logicalDevice, setLayoutBindings));

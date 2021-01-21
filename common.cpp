@@ -714,3 +714,32 @@ void copyBuffer(VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue
     vkQueueWaitIdle(queue);
     vkFreeCommandBuffers(logicalDevice, commandPool, 1, commandBuffers.data());
 }
+
+VkDescriptorPool createDescriptorPool(VkDevice logicalDevice, uint32_t maxSetCount, const std::vector<VkDescriptorPoolSize> &descriptorPoolSizes)
+{
+    VkDescriptorPoolCreateInfo createInfo{
+        VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        nullptr,
+        0,
+        maxSetCount,
+        static_cast<uint32_t>(descriptorPoolSizes.size()),
+        descriptorPoolSizes.data()};
+    VkDescriptorPool ret;
+    if (vkCreateDescriptorPool(logicalDevice, &createInfo, nullptr, &ret) != VK_SUCCESS)
+        throw std::runtime_error("failed to create DescriptorPool");
+    return ret;
+}
+
+std::vector<VkDescriptorSet> createDescriptorSets(VkDevice logicalDevice, VkDescriptorPool descriptorPool, const std::vector<VkDescriptorSetLayout> &descriptorSetLayouts)
+{
+    std::vector<VkDescriptorSet> ret(descriptorSetLayouts.size());
+    VkDescriptorSetAllocateInfo allocInfo{
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        nullptr,
+        descriptorPool,
+        static_cast<uint32_t>(descriptorSetLayouts.size()),
+        descriptorSetLayouts.data()};
+    if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, ret.data()) != VK_SUCCESS)
+        throw std::runtime_error("failed to allocate descriptor set");
+    return ret;
+}

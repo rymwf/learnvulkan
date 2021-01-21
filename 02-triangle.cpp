@@ -11,6 +11,16 @@
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
+struct UBO_MVP
+{
+    glm::mat4 M;
+    glm::mat4 V;
+    glm::mat4 P;
+};
+
+UBO_MVP uboMVP{
+    {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}};
+
 struct Vertex
 {
     glm::vec2 pos;
@@ -38,10 +48,10 @@ struct Vertex
     }
 };
 std::vector<Vertex> vertices{
-    {{-0.5, -0.5}, {1, 0, 0}},
-    {{-0.5, 0.5}, {0, 1, 0}},
-    {{0.5, -0.5}, {0, 0, 1}},
-    {{0.5, 0.5}, {1, 1, 1}},
+    {{-1, -1}, {1, 0, 0}},
+    {{-1, 1}, {0, 1, 0}},
+    {{1, -1}, {0, 0, 1}},
+    {{1, 1}, {1, 1, 1}},
 };
 std::vector<uint16_t> indices{
     0, 1, 2, 2, 1, 3};
@@ -114,9 +124,20 @@ private:
     VkDeviceMemory vertexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+    std::vector<VkBuffer> uboMVPBuffers;
+    std::vector<VkDeviceMemory> uboMVPBufferMemorys;
+
+    VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
+
+    uint32_t FPS;
+    float frameTimeInterval_ms;
+    std::chrono::system_clock::time_point curTime;
+    std::chrono::system_clock::time_point startTime;
 
     void initWindow()
     {
+        startTime = std::chrono::system_clock::now();
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -157,9 +178,6 @@ private:
         transferCommandPool = createCommandPool(logicalDevice, transferQueueFamilyIndex);
 
         createShaderModuleInfos();
-        createDescriptorSetLayouts();
-        pipelineLayout = createPipelineLayout(logicalDevice, descriptorSetLayouts);
-
         createVertexBuffer();
         createIndexBuffer();
 
@@ -167,6 +185,11 @@ private:
         chooseSwapExtent(surfaceCaps, window, swapchainExtent);
         swapchain = createSwapchain(logicalDevice, physicalDevice, surface, surfaceCaps, queueFamilyIndices, swapchainExtent, swapchainImageFormat);
         createImageViews(logicalDevice, swapchain, swapchainImages, swapchainImageViews, swapchainImageFormat);
+
+        createUBObuffer();
+        createDescriptors();
+        pipelineLayout = createPipelineLayout(logicalDevice, descriptorSetLayouts);
+
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
@@ -219,6 +242,10 @@ private:
     {
         while (!glfwWindowShouldClose(window))
         {
+            auto temptime = std::chrono::system_clock::now();
+            frameTimeInterval_ms = std::chrono::duration<float, std::chrono::milliseconds::period>(temptime - curTime).count();
+            curTime = temptime;
+            FPS = static_cast<uint32_t>(1000 / frameTimeInterval_ms);
             glfwPollEvents();
             drawFrame();
         }
@@ -234,6 +261,14 @@ private:
         vkDestroyBuffer(logicalDevice, indexBuffer, nullptr);
         vkFreeMemory(logicalDevice, indexBufferMemory, nullptr);
 
+        for (size_t i = 0, len = uboMVPBuffers.size(); i < len; ++i)
+        {
+            vkDestroyBuffer(logicalDevice, uboMVPBuffers[i], nullptr);
+            vkFreeMemory(logicalDevice, uboMVPBufferMemorys[i], nullptr);
+        }
+
+        vkDestroyDescriptorPool(logicalDevice, descriptorPool, nullptr);
+
         for (auto v : inFlightFences)
             vkDestroyFence(logicalDevice, v, nullptr);
         for (auto v : imageAvailableSemaphores)
@@ -244,8 +279,10 @@ private:
         vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
         vkDestroyCommandPool(logicalDevice, transferCommandPool, nullptr);
 
-        for (auto e : descriptorSetLayouts)
+        std::unordered_set<VkDescriptorSetLayout> tempsetlayout(descriptorSetLayouts.begin(), descriptorSetLayouts.end());
+        for (auto e : tempsetlayout)
             vkDestroyDescriptorSetLayout(logicalDevice, e, nullptr);
+
         vkDestroyPipelineLayout(logicalDevice, pipelineLayout, nullptr);
 
         for (auto &e : shaderModuleInfos)
@@ -290,10 +327,47 @@ private:
         shaderModuleInfos.emplace_back(ShaderModuleInfo{VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule});
     };
 
-    void createDescriptorSetLayouts()
+    void createDescriptors()
     {
-        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {};
-        descriptorSetLayouts.emplace_back(createDescriptorSetLayout(logicalDevice, setLayoutBindings));
+        std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
+            {
+                0,
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                1,
+                VK_SHADER_STAGE_VERTEX_BIT,
+                nullptr //image sampling related descriptors
+            }};
+        uint32_t count = static_cast<uint32_t>(swapchainImages.size());
+        //descriptorSetLayouts.insert(descriptorSetLayouts.end(), count, createDescriptorSetLayout(logicalDevice, setLayoutBindings));
+        descriptorSetLayouts.insert(descriptorSetLayouts.end(), count, createDescriptorSetLayout(logicalDevice, setLayoutBindings));
+
+        VkDescriptorPoolSize poolSize{
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            count};
+        std::vector<VkDescriptorPoolSize> poolSizes{poolSize};
+        descriptorPool = createDescriptorPool(logicalDevice, count, poolSizes);
+
+        descriptorSets = createDescriptorSets(logicalDevice, descriptorPool, descriptorSetLayouts);
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            VkDescriptorBufferInfo bufferInfo{
+                uboMVPBuffers[i],
+                0,
+                sizeof(UBO_MVP)};
+            VkWriteDescriptorSet writeSet{
+                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                nullptr,
+                descriptorSets[i],
+                0,
+                0,
+                1,
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                nullptr,
+                &bufferInfo,
+                nullptr};
+            vkUpdateDescriptorSets(logicalDevice, 1, &writeSet, 0, nullptr);
+        }
     }
 
     void createRenderPass()
@@ -566,6 +640,8 @@ private:
             vkCmdBindVertexBuffers(commandBuffers[i], 0, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets);
             vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+            vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
+
             //            vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
             vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
@@ -613,6 +689,8 @@ private:
         {
             throw std::runtime_error("failed to acquire swapchain image");
         }
+
+        updateUBObuffer(imageIndex);
 
         // Check if a previous frame is using this image (i.e. there is its fence to wait on)
         if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -706,6 +784,35 @@ private:
 
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    }
+    void createUBObuffer()
+    {
+        auto count = swapchainImages.size();
+        uboMVPBuffers.resize(count);
+        uboMVPBufferMemorys.resize(count);
+        VkDeviceSize buffersize = sizeof(UBO_MVP);
+        for (size_t i = 0; i < count; ++i)
+        {
+            createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, uboMVPBuffers[i], uboMVPBufferMemorys[i]);
+            void *data;
+            vkMapMemory(logicalDevice, uboMVPBufferMemorys[i], 0, buffersize, 0, &data);
+            memcpy(data, &uboMVP, buffersize);
+            vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[i]);
+        }
+    }
+
+    void updateUBObuffer(uint32_t index)
+    {
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
+        uboMVP.M = glm::rotate(glm::mat4(1), time * 90, glm::vec3(0, 1, 0));
+        uboMVP.V = glm::lookAt(glm::vec3{0, 0, 5}, glm::vec3{0}, glm::vec3{0, 1, 0}); //{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
+        uboMVP.P = glm::perspective(45.f, float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f);
+
+        uint32_t buffersize = sizeof(UBO_MVP);
+        void *data;
+        vkMapMemory(logicalDevice, uboMVPBufferMemorys[index], 0, buffersize, 0, &data);
+        memcpy(data, &uboMVP, buffersize);
+        vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[index]);
     }
 };
 
