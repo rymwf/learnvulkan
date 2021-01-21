@@ -22,12 +22,16 @@
 #include <cstring>
 #include <chrono>
 
+//#define GLM_FORCE_DEPTH_ZERO_TO_ONE 
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "config.h"
 
 #define GLFW_INCLUDE_VULKAN
+
+
 
 #ifdef _WIN32
 #include <Windows.h>

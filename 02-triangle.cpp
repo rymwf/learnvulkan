@@ -806,9 +806,9 @@ private:
     void updateUBObuffer(uint32_t index)
     {
         float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
-        uboMVP.M = glm::rotate(glm::mat4(1), time * 90, glm::vec3(0, 1, 0));
+        uboMVP.M = glm::rotate(glm::mat4(1), time * glm::radians(90.f), glm::vec3(0, 1, 0));
         uboMVP.V = glm::lookAt(glm::vec3{0, 0, 5}, glm::vec3{0}, glm::vec3{0, 1, 0}); //{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
-        uboMVP.P = glm::perspective(45.f, float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f);
+        uboMVP.P = glm::perspective(glm::radians(45.f), float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f);
 
         uint32_t buffersize = sizeof(UBO_MVP);
         void *data;
