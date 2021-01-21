@@ -18,7 +18,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED on)
 set(CMAKE_CXX_EXTENSIONS off)
 
 if(MSVC) 
-add_compile_options(/W4 /WX /wd4201 /wd4996 /wd4100 /wd4189 /wd4819)
+add_compile_options(/W4 /WX /wd4201 /wd4996 /wd4100 /wd4189 /wd4819 /wd4324)
 
 if(${CMAKE_VS_PLATFORM_NAME} STREQUAL "x64")
     set(VULKAN_LIB_DIR $ENV{VULKAN_SDK}/lib)

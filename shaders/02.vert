@@ -5,7 +5,9 @@ layout(location=1) in vec3 inColor;
 
 layout(location=0)out vec3 fragColor;
 
+//std140
 layout(binding=0) uniform UBO_MVP{
+    vec2 foo;
     mat4 M;
     mat4 V;
     mat4 P;

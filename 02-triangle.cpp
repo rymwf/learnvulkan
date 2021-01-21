@@ -11,15 +11,17 @@
 
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
+//std140, round to base alignment of vec4
 struct UBO_MVP
 {
-    glm::mat4 M;
-    glm::mat4 V;
-    glm::mat4 P;
+    alignas(16) glm::vec2 foo;
+    alignas(16) glm::mat4 M;
+    alignas(16) glm::mat4 V;
+    alignas(16) glm::mat4 P;
 };
 
 UBO_MVP uboMVP{
-    {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}};
+    {}, {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}};
 
 struct Vertex
 {
