@@ -22,7 +22,7 @@
 #include <cstring>
 #include <chrono>
 
-//#define GLM_FORCE_DEPTH_ZERO_TO_ONE 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -30,8 +30,6 @@
 #include "config.h"
 
 #define GLFW_INCLUDE_VULKAN
-
-
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -106,11 +104,11 @@ VkSwapchainKHR createSwapchain(VkDevice device,
 uint32_t findQueueFamilyIndexByFlag(std::vector<VkQueueFamilyProperties> &queueFamilyProperties, VkQueueFlagBits flag, const std::unordered_set<uint32_t> &skipIndices = {});
 uint32_t findQueueFamilyIndexPresent(VkPhysicalDevice physicalDevice, uint32_t familyNum, VkSurfaceKHR surface);
 
-void createImageViews(VkDevice logicalDevice,
-                      VkSwapchainKHR swapchain,
-                      std::vector<VkImage> &swapchainImagesOut,
-                      std::vector<VkImageView> &swapchainImageViewsOut,
-                      VkFormat swapchainImageFormat);
+void createSwapchainImageViews(VkDevice logicalDevice,
+                               VkSwapchainKHR swapchain,
+                               std::vector<VkImage> &swapchainImagesOut,
+                               std::vector<VkImageView> &swapchainImageViewsOut,
+                               VkFormat swapchainImageFormat);
 
 VkShaderModule createShaderModule(VkDevice logicalDevice, const std::string &code);
 
@@ -134,10 +132,25 @@ void createBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDev
 
 uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice, uint32_t typeIndexFilter, VkMemoryPropertyFlags properties);
 
-VkDeviceMemory allocateMemory(VkDevice logicalDevice, uint32_t memoryTypeIndex, VkDeviceSize memsize);
-
-void copyBuffer(VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize);
+VkDeviceMemory allocateMemory(VkDevice logicalDevice, VkDeviceSize memsize, uint32_t memoryTypeIndex);
 
 VkDescriptorPool createDescriptorPool(VkDevice logicalDevice, uint32_t maxSetCount, const std::vector<VkDescriptorPoolSize> &descriptorPoolSizes);
 
 std::vector<VkDescriptorSet> createDescriptorSets(VkDevice logicalDevice, VkDescriptorPool descriptorPool, const std::vector<VkDescriptorSetLayout> &descriptorSetLayouts);
+
+void createImage(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, const VkImageCreateInfo &imageCreateInfo, VkMemoryPropertyFlags properties, VkImage &outImage, VkDeviceMemory &outImageMemory);
+
+VkCommandBuffer beginOneTimeCommands(VkDevice logicalDevice, VkCommandPool commandPool);
+
+void endOneTimeCommands(VkDevice logicalDevice, VkQueue queue, VkCommandPool commandPool, VkCommandBuffer commandBuffer);
+
+void copyBuffer2Image(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, VkExtent3D dstImageExtent);
+
+void transitionImageLayout(VkCommandBuffer commandBuffer,
+                           VkImage image,
+                           VkImageLayout oldLayout,
+                           VkImageLayout newLayout);
+
+VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat);
+
+VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode);

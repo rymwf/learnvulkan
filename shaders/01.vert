@@ -8,7 +8,7 @@
 //
 //layout(location=0)out  VS_OUT vs_out;
 
-vec2 temppos[3]={{0,0},{1,0},{0,1}};
+vec2 temppos[3]={{0,0},{0,1},{1,0}};    //front face, y axis downwards
 
 
 void main(){

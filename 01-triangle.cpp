@@ -103,7 +103,7 @@ private:
         chooseSwapExtent(surfaceCaps, window, swapchainExtent);
         swapchain = createSwapchain(logicalDevice, physicalDevice, surface, surfaceCaps, queueFamilyIndices, swapchainExtent, swapchainImageFormat);
 
-        createImageViews(logicalDevice, swapchain, swapchainImages, swapchainImageViews, swapchainImageFormat);
+        createSwapchainImageViews(logicalDevice, swapchain, swapchainImages, swapchainImageViews, swapchainImageFormat);
 
         createShaderModuleInfos();
 
@@ -345,7 +345,7 @@ private:
             VK_FALSE,
             VK_FALSE,
             VK_POLYGON_MODE_FILL,
-            VK_CULL_MODE_NONE,
+            VK_CULL_MODE_BACK_BIT,
             VK_FRONT_FACE_COUNTER_CLOCKWISE,
             VK_FALSE, //depth bias
             0,        //depth bias constant factor

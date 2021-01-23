@@ -119,6 +119,7 @@ int rateDeviceSuitability(VkPhysicalDevice device)
     //       LOG(deviceProperties.sparseProperties);
 
     LOG(deviceFeatures.geometryShader);
+    LOG(deviceFeatures.samplerAnisotropy);
     // Application can't function without geometry shaders
     int score = 0;
     if (!deviceFeatures.geometryShader)
@@ -403,11 +404,11 @@ VkSwapchainKHR createSwapchain(VkDevice device,
     return ret;
 }
 
-void createImageViews(VkDevice logicalDevice,
-                      VkSwapchainKHR swapchain,
-                      std::vector<VkImage> &swapchainImagesOut,
-                      std::vector<VkImageView> &swapchainImageViewsOut,
-                      VkFormat swapchainImageFormat)
+void createSwapchainImageViews(VkDevice logicalDevice,
+                               VkSwapchainKHR swapchain,
+                               std::vector<VkImage> &swapchainImagesOut,
+                               std::vector<VkImageView> &swapchainImageViewsOut,
+                               VkFormat swapchainImageFormat)
 {
     uint32_t imagecount;
     vkGetSwapchainImagesKHR(logicalDevice, swapchain, &imagecount, nullptr);
@@ -631,7 +632,7 @@ void createBuffer(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkDev
 
     auto memoryTypeIndex = findMemoryTypeIndex(physicalDevice, vertexBufferMemoryRequirements.memoryTypeBits, properties); //the index of memory type
 
-    outBufferMemory = allocateMemory(logicalDevice, memoryTypeIndex, vertexBufferMemoryRequirements.size);
+    outBufferMemory = allocateMemory(logicalDevice, vertexBufferMemoryRequirements.size, memoryTypeIndex);
 
     vkBindBufferMemory(logicalDevice, outBuffer, outBufferMemory, 0);
 }
@@ -663,7 +664,7 @@ uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice, uint32_t typeIndex
     throw std::runtime_error("failed to find suitable memory type");
 }
 
-VkDeviceMemory allocateMemory(VkDevice logicalDevice, uint32_t memoryTypeIndex, VkDeviceSize memsize)
+VkDeviceMemory allocateMemory(VkDevice logicalDevice, VkDeviceSize memsize, uint32_t memoryTypeIndex)
 {
     VkMemoryAllocateInfo allocateInfo{
         VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -693,28 +694,6 @@ std::vector<VkCommandBuffer> createCommandBuffers(VkDevice logicalDevice, VkComm
     return commandBuffers;
 }
 
-void copyBuffer(VkDevice logicalDevice, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize bufferSize)
-{
-    auto commandBuffers = createCommandBuffers(logicalDevice, commandPool, 1);
-    VkCommandBufferBeginInfo cmdBeginInfo{
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        nullptr,
-        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-    VkBufferCopy bufferCopyRegion{0, 0, bufferSize};
-    vkBeginCommandBuffer(commandBuffers[0], &cmdBeginInfo);
-    vkCmdCopyBuffer(commandBuffers[0], srcBuffer, dstBuffer, 1, &bufferCopyRegion);
-    vkEndCommandBuffer(commandBuffers[0]);
-
-    VkSubmitInfo submitInfo{
-        VK_STRUCTURE_TYPE_SUBMIT_INFO,
-    };
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = commandBuffers.data();
-    vkQueueSubmit(queue, 1, &submitInfo, 0);
-    vkQueueWaitIdle(queue);
-    vkFreeCommandBuffers(logicalDevice, commandPool, 1, commandBuffers.data());
-}
-
 VkDescriptorPool createDescriptorPool(VkDevice logicalDevice, uint32_t maxSetCount, const std::vector<VkDescriptorPoolSize> &descriptorPoolSizes)
 {
     VkDescriptorPoolCreateInfo createInfo{
@@ -742,4 +721,99 @@ std::vector<VkDescriptorSet> createDescriptorSets(VkDevice logicalDevice, VkDesc
     if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, ret.data()) != VK_SUCCESS)
         throw std::runtime_error("failed to allocate descriptor set");
     return ret;
+}
+
+void createImage(VkPhysicalDevice physicalDevice, VkDevice logicalDevice, const VkImageCreateInfo &imageCreateInfo, VkMemoryPropertyFlags properties, VkImage &outImage, VkDeviceMemory &outImageMemory)
+{
+    if (vkCreateImage(logicalDevice, &imageCreateInfo, nullptr, &outImage) != VK_SUCCESS)
+        throw std::runtime_error("failed to create image");
+
+    VkMemoryRequirements imageMemoryRequireMents;
+    vkGetImageMemoryRequirements(logicalDevice, outImage, &imageMemoryRequireMents);
+    LOG(imageMemoryRequireMents.size);
+    LOG(imageMemoryRequireMents.alignment);
+    LOG(imageMemoryRequireMents.memoryTypeBits);
+
+    auto memoryTypeIndex = findMemoryTypeIndex(physicalDevice, imageMemoryRequireMents.memoryTypeBits, properties);
+
+    outImageMemory = allocateMemory(logicalDevice, imageMemoryRequireMents.size, memoryTypeIndex);
+
+    vkBindImageMemory(logicalDevice, outImage, outImageMemory, 0);
+}
+
+VkCommandBuffer beginOneTimeCommands(VkDevice logicalDevice, VkCommandPool commandPool)
+{
+    VkCommandBuffer commandBuffer = createCommandBuffers(logicalDevice, commandPool, 1)[0];
+
+    VkCommandBufferBeginInfo beginInfo{
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        nullptr,
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+        throw std::runtime_error("failed to begin command buffer");
+
+    return commandBuffer;
+}
+
+void endOneTimeCommands(VkDevice logicalDevice, VkQueue queue, VkCommandPool commandPool, VkCommandBuffer commandBuffer)
+{
+    vkEndCommandBuffer(commandBuffer);
+    VkSubmitInfo submitInfo{
+        VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    };
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    vkQueueSubmit(queue, 1, &submitInfo, 0);
+    vkQueueWaitIdle(queue);
+    vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
+}
+
+VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat)
+{
+    VkImageView imageView;
+    VkImageViewCreateInfo createInfo{
+        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        nullptr,
+        0,
+        image,
+        imageViewType,
+        imageFormat,
+        {},
+        {VK_IMAGE_ASPECT_COLOR_BIT,
+         0,
+         1,
+         0,
+         1}};
+    if (vkCreateImageView(logicalDevice, &createInfo, nullptr, &imageView) != VK_SUCCESS)
+        throw std::runtime_error("failed to create image view");
+    return imageView;
+}
+
+VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode)
+{
+    VkSampler sampler;
+    VkSamplerCreateInfo createInfo{
+        VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        nullptr,
+        0,
+        magFilter,
+        minFilter,
+        mipmapMode,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        0,
+        VK_TRUE,
+        16,
+        VK_FALSE,
+        VK_COMPARE_OP_ALWAYS,
+        0,
+        0,
+        VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        VK_FALSE};
+    if (vkCreateSampler(logicalDevice, &createInfo, nullptr, &sampler) != VK_SUCCESS)
+        throw std::runtime_error("failed to create sampler");
+
+    return sampler;
 }

@@ -1,1 +1,2 @@
 #define WORKING_DIR "${MYOUTPUT_DIR}"
+#define PROJECT_DIR "${CMAKE_SOURCE_DIR}"
