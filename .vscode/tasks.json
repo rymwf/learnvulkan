@@ -7,7 +7,7 @@
 			"command": "cmake",
 			"args": [
 				"--build",
-				"${fileDirname}\\build\\",
+				"${workspaceFolder}\\build\\",
 				"--target",
 				"${fileBasenameNoExtension}",
 				"--config",
@@ -27,7 +27,7 @@
 			"command": "cmake",
 			"args": [
 				"--build",
-				"${fileDirname}\\build\\",
+				"${workspaceFolder}\\build\\",
 				"--target",
 				"${fileBasenameNoExtension}",
 				"--config",

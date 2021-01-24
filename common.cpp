@@ -14,7 +14,7 @@ std::string readFile(const char *filename)
     std::fstream file(filename, std::ios::in | std::ios::ate | std::ios::binary);
     if (!file.is_open())
         throw std::runtime_error("failed to open file");
-    size_t size0 = file.tellg();
+    size_t size0 = static_cast<size_t>(file.tellg());
     std::string ret;
     ret.resize(size0);
     file.seekg(0);

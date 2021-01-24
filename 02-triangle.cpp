@@ -757,7 +757,7 @@ private:
         createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
-        memcpy(data, vertices.data(), buffersize);
+        memcpy(data, vertices.data(), static_cast<size_t>(buffersize));
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         //use device local buffer is fastest
@@ -780,7 +780,7 @@ private:
         createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
-        memcpy(data, indices.data(), buffersize);
+        memcpy(data, indices.data(), static_cast<size_t>(buffersize));
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         //use device local buffer is fastest
@@ -805,7 +805,7 @@ private:
             createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, uboMVPBuffers[i], uboMVPBufferMemorys[i]);
             void *data;
             vkMapMemory(logicalDevice, uboMVPBufferMemorys[i], 0, buffersize, 0, &data);
-            memcpy(data, &uboMVP, buffersize);
+            memcpy(data, &uboMVP, static_cast<size_t>(buffersize));
             vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[i]);
         }
     }

@@ -103,7 +103,7 @@ struct InstanceAttribute
     }
 };
 std::vector<InstanceAttribute> instanceAttributes{
-    {glm::translate(glm::rotate(glm::mat4(1), glm::radians(15.f), glm::vec3(0, 1, 0)), glm::vec3(-0.5))},
+    {glm::rotate(glm::mat4(1), glm::radians(15.f), glm::vec3(0, 1, 0))},
     {glm::translate(glm::rotate(glm::mat4(1), glm::radians(15.f), glm::vec3(0, 1, 0)), glm::vec3(0.5))},
 };
 
@@ -795,6 +795,7 @@ private:
         }
 
         updateUBObuffer(imageIndex);
+        updateInstanceAttributes();
 
         // Check if a previous frame is using this image (i.e. there is its fence to wait on)
         if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -858,7 +859,7 @@ private:
         createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
-        memcpy(data, vertices.data(), buffersize);
+        memcpy(data, vertices.data(), static_cast<size_t>(buffersize));
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         //use device local buffer is fastest
@@ -875,25 +876,30 @@ private:
     void createInstanceAttribeBuffer()
     {
         VkDeviceSize buffersize = sizeof(instanceAttributes[0]) * instanceAttributes.size();
-
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffer, instanceBufferMemory);
         void *data;
-        vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
-        memcpy(data, instanceAttributes.data(), buffersize);
-        vkUnmapMemory(logicalDevice, stagingBufferMemory);
+        vkMapMemory(logicalDevice, instanceBufferMemory, 0, buffersize, 0, &data);
+        memcpy(data, instanceAttributes.data(), static_cast<size_t>(buffersize));
+        vkUnmapMemory(logicalDevice, instanceBufferMemory);
 
-        //use device local buffer is fastest
-        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer, instanceBufferMemory);
+        //VkBuffer stagingBuffer;
+        //VkDeviceMemory stagingBufferMemory;
+        //createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        //void *data;
+        //vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
+        //memcpy(data, instanceAttributes.data(), buffersize);
+        //vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
-        auto cmdBuffer = beginOneTimeCommands(logicalDevice, transferCommandPool);
-        VkBufferCopy bufferCopyRegion{0, 0, buffersize};
-        vkCmdCopyBuffer(cmdBuffer, stagingBuffer, instanceBuffer, 1, &bufferCopyRegion);
-        endOneTimeCommands(logicalDevice, transferQueue, transferCommandPool, cmdBuffer);
+        ////use device local buffer is fastest
+        //createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer, instanceBufferMemory);
 
-        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
-        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+        //auto cmdBuffer = beginOneTimeCommands(logicalDevice, transferCommandPool);
+        //VkBufferCopy bufferCopyRegion{0, 0, buffersize};
+        //vkCmdCopyBuffer(cmdBuffer, stagingBuffer, instanceBuffer, 1, &bufferCopyRegion);
+        //endOneTimeCommands(logicalDevice, transferQueue, transferCommandPool, cmdBuffer);
+
+        //vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+        //vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
     void createIndexBuffer()
     {
@@ -904,7 +910,7 @@ private:
         createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
-        memcpy(data, indices.data(), buffersize);
+        memcpy(data, indices.data(), static_cast<size_t>(buffersize));
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         //use device local buffer is fastest
@@ -934,7 +940,7 @@ private:
             createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, uboMVPBuffers[i], uboMVPBufferMemorys[i]);
             void *data;
             vkMapMemory(logicalDevice, uboMVPBufferMemorys[i], 0, buffersize, 0, &data);
-            memcpy(data, &uboMVP, buffersize);
+            memcpy(data, &uboMVP, static_cast<size_t>(buffersize));
             vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[i]);
         }
     }
@@ -952,6 +958,16 @@ private:
         //    memcpy(data, &uboMVP, buffersize);
         //    vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[index]);
     }
+    void updateInstanceAttributes()
+    {
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
+        glm::mat4 temp = glm::translate(glm::rotate(glm::mat4(1), glm::radians(15.f), glm::vec3(0, 1, 0)), glm::vec3(0.5, 0.5, sin(time)));
+        uint32_t buffersize = sizeof(instanceAttributes[0]);
+        void *data;
+        vkMapMemory(logicalDevice, instanceBufferMemory, 64, buffersize, 0, &data);
+        memcpy(data, &temp, buffersize);
+        vkUnmapMemory(logicalDevice, instanceBufferMemory);
+    }
 
     void createTextureImage()
     {
@@ -966,7 +982,7 @@ private:
 
         void *data;
         vkMapMemory(logicalDevice, stagingBufferMemory, 0, imageSize, 0, &data);
-        memcpy(data, pixels, imageSize);
+        memcpy(data, pixels, static_cast<size_t>(imageSize));
         vkUnmapMemory(logicalDevice, stagingBufferMemory);
 
         stbi_image_free(pixels);
