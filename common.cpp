@@ -115,7 +115,10 @@ int rateDeviceSuitability(VkPhysicalDevice device)
     LOG(deviceProperties.deviceType);
     LOG(deviceProperties.deviceName);
     LOG(deviceProperties.pipelineCacheUUID);
-    //        LOG(deviceProperties.limits);
+    LOG(deviceProperties.limits.maxVertexInputBindings);
+    LOG(deviceProperties.limits.maxVertexInputBindingStride);
+    LOG(deviceProperties.limits.maxVertexInputAttributes);
+    LOG(deviceProperties.limits.maxImageDimension2D);
     //       LOG(deviceProperties.sparseProperties);
 
     LOG(deviceFeatures.geometryShader);
@@ -410,32 +413,16 @@ void createSwapchainImageViews(VkDevice logicalDevice,
                                std::vector<VkImageView> &swapchainImageViewsOut,
                                VkFormat swapchainImageFormat)
 {
-    uint32_t imagecount;
-    vkGetSwapchainImagesKHR(logicalDevice, swapchain, &imagecount, nullptr);
-    LOG(imagecount);
-    swapchainImagesOut.resize(imagecount);
-    swapchainImageViewsOut.resize(imagecount);
-    vkGetSwapchainImagesKHR(logicalDevice, swapchain, &imagecount, swapchainImagesOut.data());
+    uint32_t swapchainImageCount;
+    vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, nullptr);
+    LOG(swapchainImageCount);
+    swapchainImagesOut.resize(swapchainImageCount);
+    swapchainImageViewsOut.resize(swapchainImageCount);
+    vkGetSwapchainImagesKHR(logicalDevice, swapchain, &swapchainImageCount, swapchainImagesOut.data());
 
-    VkImageViewCreateInfo imageViewCreateInfo{
-        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        nullptr,
-        0,
-        0,
-        VK_IMAGE_VIEW_TYPE_2D,
-        swapchainImageFormat,
-        VkComponentMapping{},
-        VkImageSubresourceRange{
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            0,
-            1,
-            0,
-            1}};
-    for (uint32_t i = 0; i < imagecount; ++i)
+    for (uint32_t i = 0; i < swapchainImageCount; ++i)
     {
-        imageViewCreateInfo.image = swapchainImagesOut[i];
-        if (vkCreateImageView(logicalDevice, &imageViewCreateInfo, nullptr, &swapchainImageViewsOut[i]) != VK_SUCCESS)
-            throw std::runtime_error("failed to create imageview");
+        swapchainImageViewsOut[i] = createImageView(logicalDevice, swapchainImagesOut[i], VK_IMAGE_VIEW_TYPE_2D, swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
 
@@ -769,7 +756,7 @@ void endOneTimeCommands(VkDevice logicalDevice, VkQueue queue, VkCommandPool com
     vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
 }
 
-VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat)
+VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat, VkImageAspectFlags imageAspectMask)
 {
     VkImageView imageView;
     VkImageViewCreateInfo createInfo{
@@ -780,7 +767,7 @@ VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewTy
         imageViewType,
         imageFormat,
         {},
-        {VK_IMAGE_ASPECT_COLOR_BIT,
+        {imageAspectMask,
          0,
          1,
          0,
@@ -816,4 +803,31 @@ VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter min
         throw std::runtime_error("failed to create sampler");
 
     return sampler;
+}
+
+VkFormat findSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+{
+    for (auto format : candidates)
+    {
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+        LOG(format);
+        LOG(props.bufferFeatures);
+        LOG(props.linearTilingFeatures);
+        LOG(props.optimalTilingFeatures);
+        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
+        {
+            return format;
+        }
+        else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
+        {
+            return format;
+        }
+    }
+    throw std::runtime_error("failed to find supported format");
+}
+
+bool hasStencilComponent(VkFormat format)
+{
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }

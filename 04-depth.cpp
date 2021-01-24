@@ -15,6 +15,9 @@
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 constexpr char *testImagePath = PROJECT_DIR "/assets/textures/Lenna_test.jpg";
 
+constexpr char *vertShaderFile = WORKING_DIR "/04.vert.spv";
+constexpr char *fragShaderFile = WORKING_DIR "/04.frag.spv";
+
 //std140, round to base alignment of vec4
 struct UBO_MVP
 {
@@ -30,15 +33,14 @@ struct Vertex
     glm::vec2 texCoord;
     static VkVertexInputBindingDescription getBindingDescription()
     {
-        VkVertexInputBindingDescription ret{
+        return VkVertexInputBindingDescription{
             0,
             sizeof Vertex,
             VK_VERTEX_INPUT_RATE_VERTEX};
-        return ret;
     }
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions()
+    static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
     {
-        std::array<VkVertexInputAttributeDescription, 3> ret = {
+        return std::vector<VkVertexInputAttributeDescription>{
             VkVertexInputAttributeDescription{0,
                                               0,
                                               VK_FORMAT_R32G32_SFLOAT,
@@ -52,7 +54,6 @@ struct Vertex
                                               VK_FORMAT_R32G32_SFLOAT,
                                               static_cast<uint32_t>(offsetof(Vertex, texCoord))},
         };
-        return ret;
     }
 };
 std::vector<Vertex> vertices{
@@ -61,8 +62,50 @@ std::vector<Vertex> vertices{
     {{1, 1}, {0, 0, 1}, {1, 1}},
     {{-1, 1}, {1, 1, 1}, {0, 1}},
 };
+
 std::vector<uint16_t> indices{
     0, 1, 2, 2, 3, 0};
+
+struct InstanceAttribute
+{
+    glm::mat4 translations;
+    static VkVertexInputBindingDescription getBindingDescription()
+    {
+        return VkVertexInputBindingDescription{
+            1,
+            sizeof(InstanceAttribute),
+            VK_VERTEX_INPUT_RATE_INSTANCE};
+    }
+    static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
+    {
+        return std::vector<VkVertexInputAttributeDescription>{
+            VkVertexInputAttributeDescription{
+                3,
+                1,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
+                0},
+            VkVertexInputAttributeDescription{
+                4,
+                1,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
+                16},
+            VkVertexInputAttributeDescription{
+                5,
+                1,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
+                32},
+            VkVertexInputAttributeDescription{
+                6,
+                1,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
+                48},
+        };
+    }
+};
+std::vector<InstanceAttribute> instanceAttributes{
+    {glm::translate(glm::rotate(glm::mat4(1), glm::radians(15.f), glm::vec3(0, 1, 0)), glm::vec3(-0.5))},
+    {glm::translate(glm::rotate(glm::mat4(1), glm::radians(15.f), glm::vec3(0, 1, 0)), glm::vec3(0.5))},
+};
 
 class HelloTriangleApplication
 {
@@ -134,10 +177,16 @@ private:
     VkDeviceMemory indexBufferMemory;
     std::vector<VkBuffer> uboMVPBuffers;
     std::vector<VkDeviceMemory> uboMVPBufferMemorys;
+    VkBuffer instanceBuffer;
+    VkDeviceMemory instanceBufferMemory;
 
     VkImage testImage;
     VkDeviceMemory testImageMemory;
     VkImageView testImageView;
+
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
 
     VkSampler sampler;
 
@@ -195,6 +244,7 @@ private:
 
         createShaderModuleInfos();
         createVertexBuffer();
+        createInstanceAttribeBuffer();
         createIndexBuffer();
         createTextureImage();
         createImageTextureView();
@@ -203,6 +253,8 @@ private:
         chooseSwapExtent(surfaceCaps, window, swapchainExtent);
         swapchain = createSwapchain(logicalDevice, physicalDevice, surface, surfaceCaps, queueFamilyIndices, swapchainExtent, swapchainImageFormat);
         createSwapchainImageViews(logicalDevice, swapchain, swapchainImages, swapchainImageViews, swapchainImageFormat);
+
+        createDepthResources();
 
         createUBObuffer();
         createDescriptors();
@@ -232,6 +284,7 @@ private:
         chooseSwapExtent(surfaceCaps, window, swapchainExtent);
         swapchain = createSwapchain(logicalDevice, physicalDevice, surface, surfaceCaps, queueFamilyIndices, swapchainExtent, swapchainImageFormat);
         createSwapchainImageViews(logicalDevice, swapchain, swapchainImages, swapchainImageViews, swapchainImageFormat);
+        createDepthResources();
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
@@ -240,6 +293,11 @@ private:
     }
     void cleanupSwapchain()
     {
+
+        vkDestroyImage(logicalDevice, depthImage, nullptr);
+        vkFreeMemory(logicalDevice, depthImageMemory, nullptr);
+        vkDestroyImageView(logicalDevice, depthImageView, nullptr);
+
         for (auto e : swapchainFramebuffers)
             vkDestroyFramebuffer(logicalDevice, e, nullptr);
 
@@ -274,10 +332,13 @@ private:
     {
         cleanupSwapchain();
 
+        vkDestroyBuffer(logicalDevice, instanceBuffer, nullptr);
+        vkFreeMemory(logicalDevice, instanceBufferMemory, nullptr);
         vkDestroyBuffer(logicalDevice, vertexBuffer, nullptr);
         vkFreeMemory(logicalDevice, vertexBufferMemory, nullptr);
         vkDestroyBuffer(logicalDevice, indexBuffer, nullptr);
         vkFreeMemory(logicalDevice, indexBufferMemory, nullptr);
+
         vkDestroyImage(logicalDevice, testImage, nullptr);
         vkFreeMemory(logicalDevice, testImageMemory, nullptr);
         vkDestroyImageView(logicalDevice, testImageView, nullptr);
@@ -336,8 +397,6 @@ private:
     {
         //vertex shader
         //build by run compileshaders.py
-        auto vertShaderFile = WORKING_DIR "/03.vert.spv";
-        auto fragShaderFile = WORKING_DIR "/03.frag.spv";
 
         auto vertShaderCode = readFile(vertShaderFile);
         auto fragShaderCode = readFile(fragShaderFile);
@@ -422,16 +481,15 @@ private:
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
              VK_IMAGE_LAYOUT_UNDEFINED,
              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
-            //            {0,
-            //             VK_FORMAT_D24_UNORM_S8_UINT,
-            //             VK_SAMPLE_COUNT_1_BIT,
-            //             VK_ATTACHMENT_LOAD_OP_CLEAR,
-            //             VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            //             VK_ATTACHMENT_LOAD_OP_CLEAR,
-            //             VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            //             VK_IMAGE_LAYOUT_UNDEFINED,
-            //             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
-        };
+            {0,
+             findDepthFormat(),
+             VK_SAMPLE_COUNT_1_BIT,
+             VK_ATTACHMENT_LOAD_OP_CLEAR,
+             VK_ATTACHMENT_STORE_OP_DONT_CARE,
+             VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+             VK_ATTACHMENT_STORE_OP_DONT_CARE,
+             VK_IMAGE_LAYOUT_UNDEFINED,
+             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
 
         std::vector<VkAttachmentReference> colorAttachments{
             {0, //the index of attachment description
@@ -449,8 +507,7 @@ private:
                 static_cast<uint32_t>(colorAttachments.size()),
                 colorAttachments.data(),
                 nullptr, //resolve attachment, used for multisampling color attachment
-                nullptr,
-                //&depthStencilAttachment,
+                &depthStencilAttachment,
                 0,
                 nullptr //preserve attachments, when data must be preserved
             }};
@@ -501,8 +558,11 @@ private:
         }
 
         std::vector<VkVertexInputBindingDescription> inputBindingDescriptions{
-            Vertex::getBindingDescription()};
+            Vertex::getBindingDescription(),
+            InstanceAttribute::getBindingDescription()};
         auto inputAttributeDescriptions = Vertex::getAttributeDescriptions();
+        auto instanceAttribesDesc = InstanceAttribute::getAttributeDescriptions();
+        inputAttributeDescriptions.insert(inputAttributeDescriptions.end(), instanceAttribesDesc.begin(), instanceAttribesDesc.end());
 
         VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{
             VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -573,7 +633,13 @@ private:
         VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{
             VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             nullptr,
-            0};
+            0,
+            VK_TRUE,
+            VK_TRUE,
+            VK_COMPARE_OP_LESS,
+            VK_FALSE,
+            VK_FALSE,
+        };
 
         std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachmentStates{
             {VK_TRUE,
@@ -640,7 +706,7 @@ private:
         swapchainFramebuffers.resize(swapchainImageViews.size());
         for (size_t i = 0, l = swapchainImages.size(); i < l; ++i)
         {
-            std::vector<VkImageView> attachments{swapchainImageViews[i]};
+            std::vector<VkImageView> attachments{swapchainImageViews[i], depthImageView};
             swapchainFramebuffers[i] = createFramebuffer(logicalDevice, renderPass, attachments, VkExtent3D{swapchainExtent.width, swapchainExtent.height, 1});
         }
     }
@@ -649,13 +715,10 @@ private:
         auto count = static_cast<uint32_t>(swapchainFramebuffers.size());
         commandBuffers = createCommandBuffers(logicalDevice, commandPool, count);
 
-        VkClearValue clearValue{
-            {
-                0.2f,
-                0.2f,
-                0.2f,
-                1,
-            }};
+        std::array<VkClearValue, 2> clearValues;
+        clearValues[0].color = {0.2f, 0.2f, 0.2f, 1};
+        clearValues[1].depthStencil = {1.f, 0};
+
         VkCommandBufferBeginInfo cmdBeginInfo{
             VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         VkRenderPassBeginInfo renderPassBeginInfo{
@@ -664,8 +727,8 @@ private:
             renderPass,
             0,
             {0, 0, swapchainExtent.width, swapchainExtent.height},
-            1,
-            &clearValue};
+            static_cast<uint32_t>(clearValues.size()),
+            clearValues.data()};
 
         for (uint32_t i = 0; i < count; ++i)
         {
@@ -676,15 +739,15 @@ private:
             vkCmdBeginRenderPass(commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
             vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-            std::vector<VkBuffer> vertexBuffers = {vertexBuffer};
-            VkDeviceSize offsets[] = {0};
+            std::vector<VkBuffer> vertexBuffers = {vertexBuffer, instanceBuffer};
+            VkDeviceSize offsets[] = {0, 0};
             vkCmdBindVertexBuffers(commandBuffers[i], 0, static_cast<uint32_t>(vertexBuffers.size()), vertexBuffers.data(), offsets);
             vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
 
             //            vkCmdDraw(commandBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-            vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+            vkCmdDrawIndexed(commandBuffers[i], static_cast<uint32_t>(indices.size()), static_cast<uint32_t>(instanceAttributes.size()), 0, 0, 0);
 
             vkCmdEndRenderPass(commandBuffers[i]);
 
@@ -809,6 +872,29 @@ private:
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
         vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
     }
+    void createInstanceAttribeBuffer()
+    {
+        VkDeviceSize buffersize = sizeof(instanceAttributes[0]) * instanceAttributes.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        void *data;
+        vkMapMemory(logicalDevice, stagingBufferMemory, 0, buffersize, 0, &data);
+        memcpy(data, instanceAttributes.data(), buffersize);
+        vkUnmapMemory(logicalDevice, stagingBufferMemory);
+
+        //use device local buffer is fastest
+        createBuffer(physicalDevice, logicalDevice, buffersize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer, instanceBufferMemory);
+
+        auto cmdBuffer = beginOneTimeCommands(logicalDevice, transferCommandPool);
+        VkBufferCopy bufferCopyRegion{0, 0, buffersize};
+        vkCmdCopyBuffer(cmdBuffer, stagingBuffer, instanceBuffer, 1, &bufferCopyRegion);
+        endOneTimeCommands(logicalDevice, transferQueue, transferCommandPool, cmdBuffer);
+
+        vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
+        vkFreeMemory(logicalDevice, stagingBufferMemory, nullptr);
+    }
     void createIndexBuffer()
     {
         VkDeviceSize buffersize = sizeof(indices[0]) * indices.size();
@@ -835,11 +921,9 @@ private:
     void createUBObuffer()
     {
         uboMVP = {
-            {1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1},
-            //            glm::lookAt(glm::vec3{0, 0, 5}, glm::vec3{0}, glm::vec3{0, 1, 0}),
             glm::mat4(1),
-            glm::mat4(1),
-        };
+            glm::lookAt(glm::vec3{0, 0, -3}, glm::vec3{0}, glm::vec3{0, -1, 0}),
+            glm::perspective(glm::radians(60.f), float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f)};
 
         auto count = swapchainImages.size();
         uboMVPBuffers.resize(count);
@@ -857,16 +941,16 @@ private:
 
     void updateUBObuffer(uint32_t index)
     {
-        //        float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
-        //        uboMVP.M = glm::rotate(glm::mat4(1), time * glm::radians(90.f), glm::vec3(0, 1, 0));
-        //        uboMVP.V = glm::lookAt(glm::vec3{0, 0, 5}, glm::vec3{0}, glm::vec3{0, 1, 0}); //{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
-        //        uboMVP.P = glm::perspective(glm::radians(45.f), float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f);
-        //
-        //        uint32_t buffersize = sizeof(UBO_MVP);
-        //        void *data;
-        //        vkMapMemory(logicalDevice, uboMVPBufferMemorys[index], 0, buffersize, 0, &data);
-        //        memcpy(data, &uboMVP, buffersize);
-        //        vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[index]);
+        //    float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
+        //    uboMVP.M = glm::rotate(glm::mat4(1), time * glm::radians(90.f), glm::vec3(0, 1, 0));
+        //    uboMVP.V = glm::lookAt(glm::vec3{0, 0, 5}, glm::vec3{0}, glm::vec3{0, -1, 0}); //{{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
+        //    uboMVP.P = glm::perspective(glm::radians(45.f), float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f);
+
+        //    uint32_t buffersize = sizeof(UBO_MVP);
+        //    void *data;
+        //    vkMapMemory(logicalDevice, uboMVPBufferMemorys[index], 0, buffersize, 0, &data);
+        //    memcpy(data, &uboMVP, buffersize);
+        //    vkUnmapMemory(logicalDevice, uboMVPBufferMemorys[index]);
     }
 
     void createTextureImage()
@@ -892,8 +976,8 @@ private:
             nullptr,
             0,
             VK_IMAGE_TYPE_2D,
-            VK_FORMAT_R8G8B8A8_SRGB,
-            //            VK_FORMAT_R8G8B8A8_UNORM,
+            //            VK_FORMAT_R8G8B8A8_SRGB,
+            VK_FORMAT_R8G8B8A8_UNORM,
             {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
             1,
             1,
@@ -965,8 +1049,35 @@ private:
     }
     void createImageTextureView()
     {
-        testImageView = createImageView(logicalDevice, testImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_ASPECT_COLOR_BIT);
+        testImageView = createImageView(logicalDevice, testImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
         sampler = createSampler(logicalDevice, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR);
+    }
+    void createDepthResources()
+    {
+        VkFormat depthFormat = findDepthFormat();
+        VkImageCreateInfo createInfo{
+            VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            nullptr,
+            0,
+            VK_IMAGE_TYPE_2D,
+            depthFormat,
+            {swapchainExtent.width, swapchainExtent.height, 1},
+            1,
+            1,
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_SHARING_MODE_EXCLUSIVE,
+            0,
+            nullptr,
+            VK_IMAGE_LAYOUT_UNDEFINED};
+
+        createImage(physicalDevice, logicalDevice, createInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        depthImageView = createImageView(logicalDevice, depthImage, VK_IMAGE_VIEW_TYPE_2D, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+    VkFormat findDepthFormat()
+    {
+        return findSupportedFormat(physicalDevice, {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     }
 };
 
