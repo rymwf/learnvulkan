@@ -15,6 +15,10 @@
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 constexpr char *testImagePath = PROJECT_DIR "/assets/textures/Lenna_test.jpg";
 
+//build by run compileshaders.py
+constexpr char *vertShaderFile = WORKING_DIR "/03.vert.spv";
+constexpr char *fragShaderFile = WORKING_DIR "/03.frag.spv";
+
 //std140, round to base alignment of vec4
 struct UBO_MVP
 {
@@ -334,11 +338,6 @@ private:
 
     void createShaderModuleInfos()
     {
-        //vertex shader
-        //build by run compileshaders.py
-        auto vertShaderFile = WORKING_DIR "/03.vert.spv";
-        auto fragShaderFile = WORKING_DIR "/03.frag.spv";
-
         auto vertShaderCode = readFile(vertShaderFile);
         auto fragShaderCode = readFile(fragShaderFile);
 
