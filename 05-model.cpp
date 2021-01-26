@@ -625,9 +625,9 @@ private:
             nullptr,
             0,
             msaaSamples,
-            VK_FALSE, //disable sample shading
-            1,        //min sample shading, must be in range [0,1], can be ignored when sample shading is diabled ,
-            nullptr,  //sample mask
+            VK_TRUE, //sample shading
+            1.f,     //min sample shading, must be in range [0,1], can be ignored when sample shading is diabled ,
+            nullptr, //sample mask
             VK_FALSE,
             VK_FALSE, //
         };

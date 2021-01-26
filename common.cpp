@@ -251,6 +251,8 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, const std::vector<
     VkPhysicalDeviceFeatures deviceFeatures;
     vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
 
+    deviceFeatures.sampleRateShading = true;
+
     const float queuePriorities = 1.0;
     std::vector<VkDeviceQueueCreateInfo> queueInfos;
     for (auto i : queueFamilyIndices)
