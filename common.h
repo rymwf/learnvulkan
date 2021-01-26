@@ -21,11 +21,13 @@
 #include <array>
 #include <cstring>
 #include <chrono>
+#include <unordered_map>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
 #include "config.h"
 
@@ -65,6 +67,50 @@ struct ShaderModuleInfo
     VkShaderStageFlagBits shaderStageFlagBits;
     VkShaderModule shaderModule;
 };
+
+struct Vertex
+{
+    glm::vec3 pos;
+    glm::vec3 color;
+    glm::vec2 texCoord;
+    static VkVertexInputBindingDescription getBindingDescription()
+    {
+        return VkVertexInputBindingDescription{
+            0,
+            sizeof Vertex,
+            VK_VERTEX_INPUT_RATE_VERTEX};
+    }
+    static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
+    {
+        return std::vector<VkVertexInputAttributeDescription>{
+            VkVertexInputAttributeDescription{0,
+                                              0,
+                                              VK_FORMAT_R32G32B32_SFLOAT,
+                                              static_cast<uint32_t>(offsetof(Vertex, pos))},
+            VkVertexInputAttributeDescription{1,
+                                              0,
+                                              VK_FORMAT_R32G32B32_SFLOAT,
+                                              static_cast<uint32_t>(offsetof(Vertex, color))},
+            VkVertexInputAttributeDescription{2,
+                                              0,
+                                              VK_FORMAT_R32G32_SFLOAT,
+                                              static_cast<uint32_t>(offsetof(Vertex, texCoord))},
+        };
+    }
+};
+bool operator==(const Vertex &lhv, const Vertex &rhv);
+
+namespace std
+{
+    template <>
+    struct hash<Vertex>
+    {
+        std::size_t operator()(Vertex const &vertex) const noexcept
+        {
+            return ((hash<glm::vec3>{}(vertex.pos) ^ hash<glm::vec3>{}(vertex.color) << 1) >> 1) ^ (hash<glm::vec2>{}(vertex.texCoord) << 1);
+        }
+    };
+}; // namespace std
 
 //query funtions
 VkSurfaceCapabilitiesKHR querySurfaceCapabilities(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface);
@@ -151,8 +197,12 @@ void transitionImageLayout(VkCommandBuffer commandBuffer,
                            VkImageLayout oldLayout,
                            VkImageLayout newLayout);
 
-VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat, VkImageAspectFlags imageAspectMask);
+VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat, VkImageAspectFlags imageAspectMask, uint32_t mipmapLevels);
 
-VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode);
+VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode, float maxLod);
 
 VkFormat findSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat> &candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+
+void generateMipmaps(VkCommandBuffer commandBuffer, VkImage image, int32_t width, int32_t height, uint32_t mipLevels, VkFilter filter);
+
+VkSampleCountFlagBits getMaxUsableSampleCount(VkPhysicalDevice physicalDevice);

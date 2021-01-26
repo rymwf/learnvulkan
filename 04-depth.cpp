@@ -25,42 +25,11 @@ struct UBO_MVP
     alignas(16) glm::mat4 V;
     alignas(16) glm::mat4 P;
 };
-
-struct Vertex
-{
-    glm::vec2 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-    static VkVertexInputBindingDescription getBindingDescription()
-    {
-        return VkVertexInputBindingDescription{
-            0,
-            sizeof Vertex,
-            VK_VERTEX_INPUT_RATE_VERTEX};
-    }
-    static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
-    {
-        return std::vector<VkVertexInputAttributeDescription>{
-            VkVertexInputAttributeDescription{0,
-                                              0,
-                                              VK_FORMAT_R32G32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, pos))},
-            VkVertexInputAttributeDescription{1,
-                                              0,
-                                              VK_FORMAT_R32G32B32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, color))},
-            VkVertexInputAttributeDescription{2,
-                                              0,
-                                              VK_FORMAT_R32G32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, texCoord))},
-        };
-    }
-};
 std::vector<Vertex> vertices{
-    {{-1, -1}, {1, 0, 0}, {0, 0}},
-    {{1, -1}, {0, 1, 0}, {1, 0}},
-    {{1, 1}, {0, 0, 1}, {1, 1}},
-    {{-1, 1}, {1, 1, 1}, {0, 1}},
+    {{-1, -1, 0}, {1, 0, 0}, {0, 0}},
+    {{1, -1, 0}, {0, 1, 0}, {1, 0}},
+    {{1, 1, 0}, {0, 0, 1}, {1, 1}},
+    {{-1, 1, 0}, {1, 1, 1}, {0, 1}},
 };
 
 std::vector<uint16_t> indices{
@@ -477,7 +446,7 @@ private:
              VK_SAMPLE_COUNT_1_BIT,
              VK_ATTACHMENT_LOAD_OP_CLEAR,
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
-             VK_ATTACHMENT_LOAD_OP_CLEAR,
+             VK_ATTACHMENT_LOAD_OP_DONT_CARE,
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
              VK_IMAGE_LAYOUT_UNDEFINED,
              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
@@ -706,6 +675,7 @@ private:
         swapchainFramebuffers.resize(swapchainImageViews.size());
         for (size_t i = 0, l = swapchainImages.size(); i < l; ++i)
         {
+            //must match the order of attachment description
             std::vector<VkImageView> attachments{swapchainImageViews[i], depthImageView};
             swapchainFramebuffers[i] = createFramebuffer(logicalDevice, renderPass, attachments, VkExtent3D{swapchainExtent.width, swapchainExtent.height, 1});
         }
@@ -1065,8 +1035,8 @@ private:
     }
     void createImageTextureView()
     {
-        testImageView = createImageView(logicalDevice, testImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
-        sampler = createSampler(logicalDevice, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR);
+        testImageView = createImageView(logicalDevice, testImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        sampler = createSampler(logicalDevice, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, 0.f);
     }
     void createDepthResources()
     {
@@ -1089,7 +1059,7 @@ private:
             VK_IMAGE_LAYOUT_UNDEFINED};
 
         createImage(physicalDevice, logicalDevice, createInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
-        depthImageView = createImageView(logicalDevice, depthImage, VK_IMAGE_VIEW_TYPE_2D, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        depthImageView = createImageView(logicalDevice, depthImage, VK_IMAGE_VIEW_TYPE_2D, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
     }
     VkFormat findDepthFormat()
     {

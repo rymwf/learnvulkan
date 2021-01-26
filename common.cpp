@@ -9,6 +9,11 @@
  */
 #include "common.h"
 
+bool operator==(const Vertex &lhv, const Vertex &rhv)
+{
+    return lhv.pos == rhv.pos && lhv.color == rhv.color && lhv.texCoord == rhv.texCoord;
+}
+
 std::string readFile(const char *filename)
 {
     std::fstream file(filename, std::ios::in | std::ios::ate | std::ios::binary);
@@ -422,7 +427,7 @@ void createSwapchainImageViews(VkDevice logicalDevice,
 
     for (uint32_t i = 0; i < swapchainImageCount; ++i)
     {
-        swapchainImageViewsOut[i] = createImageView(logicalDevice, swapchainImagesOut[i], VK_IMAGE_VIEW_TYPE_2D, swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+        swapchainImageViewsOut[i] = createImageView(logicalDevice, swapchainImagesOut[i], VK_IMAGE_VIEW_TYPE_2D, swapchainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 }
 
@@ -751,12 +756,13 @@ void endOneTimeCommands(VkDevice logicalDevice, VkQueue queue, VkCommandPool com
     };
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
-    vkQueueSubmit(queue, 1, &submitInfo, 0);
+    if (vkQueueSubmit(queue, 1, &submitInfo, 0) != VK_SUCCESS)
+        throw std::runtime_error("failed to submit one time commands");
     vkQueueWaitIdle(queue);
     vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
 }
 
-VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat, VkImageAspectFlags imageAspectMask)
+VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewType imageViewType, VkFormat imageFormat, VkImageAspectFlags imageAspectMask, uint32_t mipmapLevels)
 {
     VkImageView imageView;
     VkImageViewCreateInfo createInfo{
@@ -769,7 +775,7 @@ VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewTy
         {},
         {imageAspectMask,
          0,
-         1,
+         mipmapLevels,
          0,
          1}};
     if (vkCreateImageView(logicalDevice, &createInfo, nullptr, &imageView) != VK_SUCCESS)
@@ -777,7 +783,7 @@ VkImageView createImageView(VkDevice logicalDevice, VkImage image, VkImageViewTy
     return imageView;
 }
 
-VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode)
+VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter minFilter, VkSamplerMipmapMode mipmapMode, float maxLod)
 {
     VkSampler sampler;
     VkSamplerCreateInfo createInfo{
@@ -796,7 +802,7 @@ VkSampler createSampler(VkDevice logicalDevice, VkFilter magFilter, VkFilter min
         VK_FALSE,
         VK_COMPARE_OP_ALWAYS,
         0,
-        0,
+        maxLod,
         VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
         VK_FALSE};
     if (vkCreateSampler(logicalDevice, &createInfo, nullptr, &sampler) != VK_SUCCESS)
@@ -830,4 +836,112 @@ VkFormat findSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<
 bool hasStencilComponent(VkFormat format)
 {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
+void generateMipmaps(VkCommandBuffer commandBuffer, VkImage image, int32_t width, int32_t height, uint32_t mipLevels, VkFilter filter)
+{
+    VkImageMemoryBarrier barrier{
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        nullptr,
+        0,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        image,
+        {VK_IMAGE_ASPECT_COLOR_BIT,
+         0,
+         1,
+         0,
+         1}};
+
+    VkImageBlit blitRegion{
+        {VK_IMAGE_ASPECT_COLOR_BIT,
+         0,
+         0,
+         1},
+        {{}, {}},
+        {VK_IMAGE_ASPECT_COLOR_BIT,
+         1,
+         0,
+         1},
+        {{}, {}}};
+
+    int32_t mipWidth = width, mipHeight = height;
+    for (uint32_t i = 1; i < mipLevels; ++i)
+    {
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.subresourceRange.baseMipLevel = i - 1;
+
+        vkCmdPipelineBarrier(commandBuffer,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             0, nullptr,
+                             0, nullptr,
+                             1, &barrier);
+
+        blitRegion.srcSubresource.mipLevel = i - 1;
+        blitRegion.srcOffsets[1] = {mipWidth, mipHeight, 1};
+
+        mipWidth = (std::max)(mipWidth >> 1, 1);
+        mipHeight = (std::max)(mipHeight >> 1, 1);
+        blitRegion.dstSubresource.mipLevel = i;
+        blitRegion.dstOffsets[1] = {mipWidth, mipHeight, 1};
+        vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blitRegion, filter);
+    }
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+
+    vkCmdPipelineBarrier(commandBuffer,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         0,
+                         0, nullptr,
+                         0, nullptr,
+                         1, &barrier);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = mipLevels;
+
+    vkCmdPipelineBarrier(commandBuffer,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0,
+                         0, nullptr,
+                         0, nullptr,
+                         1, &barrier);
+}
+
+VkSampleCountFlagBits getMaxUsableSampleCount(VkPhysicalDevice physicalDevice)
+{
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+
+    VkSampleCountFlags maxSampleCount = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;
+    LOG(maxSampleCount);
+    if (maxSampleCount & VK_SAMPLE_COUNT_64_BIT)
+        return VK_SAMPLE_COUNT_64_BIT;
+    if (maxSampleCount & VK_SAMPLE_COUNT_32_BIT)
+        return VK_SAMPLE_COUNT_32_BIT;
+    if (maxSampleCount & VK_SAMPLE_COUNT_16_BIT)
+        return VK_SAMPLE_COUNT_16_BIT;
+    if (maxSampleCount & VK_SAMPLE_COUNT_8_BIT)
+        return VK_SAMPLE_COUNT_8_BIT;
+    if (maxSampleCount & VK_SAMPLE_COUNT_4_BIT)
+        return VK_SAMPLE_COUNT_4_BIT;
+    if (maxSampleCount & VK_SAMPLE_COUNT_2_BIT)
+        return VK_SAMPLE_COUNT_2_BIT;
+    return VK_SAMPLE_COUNT_1_BIT;
 }

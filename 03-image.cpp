@@ -27,43 +27,11 @@ struct UBO_MVP
     alignas(16) glm::mat4 P;
 };
 
-struct Vertex
-{
-    glm::vec2 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-    static VkVertexInputBindingDescription getBindingDescription()
-    {
-        VkVertexInputBindingDescription ret{
-            0,
-            sizeof Vertex,
-            VK_VERTEX_INPUT_RATE_VERTEX};
-        return ret;
-    }
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions()
-    {
-        std::array<VkVertexInputAttributeDescription, 3> ret = {
-            VkVertexInputAttributeDescription{0,
-                                              0,
-                                              VK_FORMAT_R32G32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, pos))},
-            VkVertexInputAttributeDescription{1,
-                                              0,
-                                              VK_FORMAT_R32G32B32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, color))},
-            VkVertexInputAttributeDescription{2,
-                                              0,
-                                              VK_FORMAT_R32G32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, texCoord))},
-        };
-        return ret;
-    }
-};
 std::vector<Vertex> vertices{
-    {{-1, -1}, {1, 0, 0}, {0, 0}},
-    {{1, -1}, {0, 1, 0}, {1, 0}},
-    {{1, 1}, {0, 0, 1}, {1, 1}},
-    {{-1, 1}, {1, 1, 1}, {0, 1}},
+    {{-1, -1, 0}, {1, 0, 0}, {0, 0}},
+    {{1, -1, 0}, {0, 1, 0}, {1, 0}},
+    {{1, 1, 0}, {0, 0, 1}, {1, 1}},
+    {{-1, 1, 0}, {1, 1, 1}, {0, 1}},
 };
 std::vector<uint16_t> indices{
     0, 1, 2, 2, 3, 0};
@@ -142,6 +110,7 @@ private:
     VkImage testImage;
     VkDeviceMemory testImageMemory;
     VkImageView testImageView;
+    uint32_t mipmapLevels;
 
     VkSampler sampler;
 
@@ -417,7 +386,7 @@ private:
              VK_SAMPLE_COUNT_1_BIT,
              VK_ATTACHMENT_LOAD_OP_CLEAR,
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
-             VK_ATTACHMENT_LOAD_OP_CLEAR,
+             VK_ATTACHMENT_LOAD_OP_DONT_CARE,
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
              VK_IMAGE_LAYOUT_UNDEFINED,
              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
@@ -873,6 +842,10 @@ private:
         int width, height, components;
         stbi_set_flip_vertically_on_load(true);
         auto pixels = stbi_load(testImagePath, &width, &height, &components, 4); //force load an alpha channel,even not exist
+        if (!pixels)
+            throw std::runtime_error("failed to load texture image!");
+        mipmapLevels = static_cast<uint32_t>(std::floor(std::log2((std::max)(width, height))) + 1);
+
         VkDeviceSize imageSize = width * height * 4;
 
         VkBuffer stagingBuffer;
@@ -894,7 +867,7 @@ private:
             VK_FORMAT_R8G8B8A8_SRGB,
             //            VK_FORMAT_R8G8B8A8_UNORM,
             {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1},
-            1,
+            mipmapLevels,
             1,
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_TILING_OPTIMAL,
@@ -921,7 +894,7 @@ private:
             testImage,
             {VK_IMAGE_ASPECT_COLOR_BIT,
              0,
-             1,
+             mipmapLevels,
              0,
              1}};
         vkCmdPipelineBarrier(cmdBuffer,
@@ -945,18 +918,20 @@ private:
         vkCmdCopyBufferToImage(cmdBuffer, stagingBuffer, testImage, barrier.newLayout, 1, &region);
 
         //3. transfer layout from trander destiation to shader reading
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        //        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        //        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        //        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        //        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        //
+        //        vkCmdPipelineBarrier(cmdBuffer,
+        //                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+        //                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        //                             0,
+        //                             0, nullptr,
+        //                             0, nullptr,
+        //                             1, &barrier);
 
-        vkCmdPipelineBarrier(cmdBuffer,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                             0,
-                             0, nullptr,
-                             0, nullptr,
-                             1, &barrier);
+        generateMipmaps(cmdBuffer, testImage, width, height, mipmapLevels, VK_FILTER_LINEAR);
 
         endOneTimeCommands(logicalDevice, graphicQueue, commandPool, cmdBuffer);
         vkDestroyBuffer(logicalDevice, stagingBuffer, nullptr);
@@ -964,8 +939,8 @@ private:
     }
     void createImageTextureView()
     {
-        testImageView = createImageView(logicalDevice, testImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
-        sampler = createSampler(logicalDevice, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR);
+        testImageView = createImageView(logicalDevice, testImage, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, mipmapLevels);
+        sampler = createSampler(logicalDevice, VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, static_cast<float>(mipmapLevels));
     }
 };
 

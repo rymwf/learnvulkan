@@ -24,39 +24,13 @@ struct UBO_MVP
     alignas(16) glm::mat4 P;
 };
 
-UBO_MVP uboMVP{{}, glm::mat4(1), glm::mat4(1), glm::mat4(1)};
+UBO_MVP uboMVP;
 
-struct Vertex
-{
-    glm::vec2 pos;
-    glm::vec3 color;
-    static VkVertexInputBindingDescription getBindingDescription()
-    {
-        VkVertexInputBindingDescription ret{
-            0,
-            sizeof Vertex,
-            VK_VERTEX_INPUT_RATE_VERTEX};
-        return ret;
-    }
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
-    {
-        std::array<VkVertexInputAttributeDescription, 2> ret = {
-            VkVertexInputAttributeDescription{0,
-                                              0,
-                                              VK_FORMAT_R32G32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, pos))},
-            VkVertexInputAttributeDescription{1,
-                                              0,
-                                              VK_FORMAT_R32G32B32_SFLOAT,
-                                              static_cast<uint32_t>(offsetof(Vertex, color))}};
-        return ret;
-    }
-};
 std::vector<Vertex> vertices{
-    {{-1, -1}, {1, 0, 0}},
-    {{1, -1}, {0, 1, 0}},
-    {{1, 1}, {0, 0, 1}},
-    {{-1, 1}, {1, 1, 1}},
+    {{-1, -1, 0}, {1, 0, 0}},
+    {{1, -1, 0}, {0, 1, 0}},
+    {{1, 1, 0}, {0, 0, 1}},
+    {{-1, 1, 0}, {1, 1, 1}},
 };
 std::vector<uint16_t> indices{
     0, 1, 2, 2, 3, 0};
@@ -378,19 +352,10 @@ private:
              VK_SAMPLE_COUNT_1_BIT,
              VK_ATTACHMENT_LOAD_OP_CLEAR,
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
-             VK_ATTACHMENT_LOAD_OP_CLEAR,
+             VK_ATTACHMENT_LOAD_OP_DONT_CARE,
              VK_ATTACHMENT_STORE_OP_DONT_CARE,
              VK_IMAGE_LAYOUT_UNDEFINED,
              VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
-            //            {0,
-            //             VK_FORMAT_D24_UNORM_S8_UINT,
-            //             VK_SAMPLE_COUNT_1_BIT,
-            //             VK_ATTACHMENT_LOAD_OP_CLEAR,
-            //             VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            //             VK_ATTACHMENT_LOAD_OP_CLEAR,
-            //             VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            //             VK_IMAGE_LAYOUT_UNDEFINED,
-            //             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},
         };
 
         std::vector<VkAttachmentReference> colorAttachments{
@@ -409,8 +374,7 @@ private:
                 static_cast<uint32_t>(colorAttachments.size()),
                 colorAttachments.data(),
                 nullptr, //resolve attachment, used for multisampling color attachment
-                nullptr,
-                //&depthStencilAttachment,
+                nullptr, //&depthStencilAttachment,
                 0,
                 nullptr //preserve attachments, when data must be preserved
             }};
@@ -811,11 +775,11 @@ private:
 
     void updateUBObuffer(uint32_t index)
     {
-        //float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
-        float time = 0;
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
+        //float time = 0;
 
-        uboMVP.M = glm::rotate(glm::mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1), time * glm::radians(90.f), glm::vec3(0, 1, 0));
-        uboMVP.V = glm::lookAt(glm::vec3{0, 0, 5}, glm::vec3{0}, glm::vec3{0, 1, 0});
+        uboMVP.M = glm::rotate(glm::mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1), time * glm::radians(10.f), glm::vec3(0, 0, 1));
+        uboMVP.V = glm::lookAt(glm::vec3{0, 0, 3}, glm::vec3{0}, glm::vec3{0, 1, 0});
         uboMVP.P = glm::perspective(glm::radians(45.f), float(swapchainExtent.width) / swapchainExtent.height, 1.f, 10.f);
         uboMVP.P[1][1] *= -1;
 
